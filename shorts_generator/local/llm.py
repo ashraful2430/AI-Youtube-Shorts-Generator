@@ -1,6 +1,10 @@
 """Local LLM backend — OpenAI or Gemini, selected by LLM_PROVIDER."""
+import time
+
 from ..config import (
+    GEMINI_FALLBACK_MODELS,
     GEMINI_MODEL,
+    GEMINI_TIMEOUT_SECONDS,
     LLM_PROVIDER,
     OPENAI_MODEL,
     require_gemini_key,
@@ -37,17 +41,43 @@ def call_gemini_llm(prompt: str) -> str:
             "    pip install -r requirements-local.txt"
         ) from e
 
-    client = genai.Client(api_key=require_gemini_key())
-    response = client.models.generate_content(
-        model=GEMINI_MODEL,
-        contents=prompt,
-        config={
-            "temperature": 0.2,
-            "response_mime_type": "application/json",
-            "max_output_tokens": 8192,
-        },
+    from google.genai import errors, types  # type: ignore
+
+    client = genai.Client(
+        api_key=require_gemini_key(),
+        http_options=types.HttpOptions(timeout=GEMINI_TIMEOUT_SECONDS * 1000),
     )
-    return response.text or ""
+    # Try the configured model first, then fallbacks (retired / overloaded
+    # models return 404 / 5xx; quota exhaustion returns 429).
+    models = [GEMINI_MODEL] + [m for m in GEMINI_FALLBACK_MODELS if m != GEMINI_MODEL]
+    failures = []
+    for model in models:
+        for attempt in range(1, 3):
+            try:
+                response = client.models.generate_content(
+                    model=model,
+                    contents=prompt,
+                    config={
+                        "temperature": 0.2,
+                        "response_mime_type": "application/json",
+                        "max_output_tokens": 8192,
+                    },
+                )
+                if model != GEMINI_MODEL:
+                    print(f"[llm/gemini] used fallback model {model}", flush=True)
+                return response.text or ""
+            except errors.APIError as e:
+                failures.append(f"{model}: HTTP {e.code} {str(e.message or '')[:160]}")
+                if e.code == 429:
+                    print(f"[llm/gemini] {model} quota/rate limit hit (429); trying next model", flush=True)
+                break  # 4xx/5xx from the API: move on to the next model
+            except Exception as e:  # network/TLS hiccups: retry once, then next model
+                failures.append(f"{model}: {type(e).__name__} {str(e)[:160]}")
+                time.sleep(3)
+    raise RuntimeError(
+        "All Gemini models failed. If you see 429, the free-tier quota is used up — "
+        "wait for it to reset (no billing needed). Details:\n  " + "\n  ".join(failures)
+    )
 
 
 def call_local_llm(prompt: str) -> str:

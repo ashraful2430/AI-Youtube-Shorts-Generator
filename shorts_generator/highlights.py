@@ -21,7 +21,7 @@ LLMFn = Callable[[str], str]
 
 
 CONTENT_TYPE_PROMPT = """Analyze this video transcript sample and classify the content type.
-Choose one: podcast, interview, tutorial, lecture, commentary, debate, vlog, other.
+Choose one: podcast, interview, tutorial, lecture, commentary, debate, vlog, gaming livestream, other.
 Also estimate content density: low (mostly filler/chit-chat), medium, or high (dense info/stories).
 Respond with JSON only: {"content_type": "...", "density": "..."}"""
 
@@ -172,8 +172,11 @@ def detect_content_type(transcript: Dict, llm_fn: LLMFn = call_muapi_llm) -> Dic
 
 
 def build_transcript_text(transcript: Dict) -> str:
+    # Chunks carry absolute timestamps; show them relative to the chunk so the
+    # caller can add `_offset` back exactly once.
+    offset = float(transcript.get("_offset", 0))
     segments = transcript.get("segments", [])
-    return "\n".join(f"[{s['start']:.1f}s] {s['text'].strip()}" for s in segments)
+    return "\n".join(f"[{s['start'] - offset:.1f}s] {s['text'].strip()}" for s in segments)
 
 
 def chunk_transcript(transcript: Dict) -> List[Dict]:
