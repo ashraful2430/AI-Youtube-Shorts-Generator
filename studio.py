@@ -11,6 +11,8 @@ import threading
 from urllib.parse import quote, unquote, urlsplit
 import webbrowser
 
+from shorts_generator.local import runs
+
 ROOT = Path(os.environ.get("CLIP_ROOT", Path(__file__).resolve().parent.parent))
 RUNS = ROOT / "work" / "runs"
 UI = Path(__file__).resolve().parent / "studio.html"
@@ -18,6 +20,126 @@ HOST, PORT = "127.0.0.1", 8765
 MEDIA = {"raw", "director", "polished", "thumbs", "temp", "hq", "input"}
 MEDIA_EXT = {".mp4", ".webm", ".jpg", ".jpeg", ".png", ".wav", ".mp3"}
 REPORTS = {"director", "compliance", "analysis"}
+CAMPAIGNS = ROOT / "campaigns"  # campaign workspaces: campaigns/<id>/config/{campaign,clips}.json
+
+
+def campaign_cfg(cid):
+    if not re.fullmatch(r"[a-z0-9][a-z0-9-]*", cid or ""):
+        return None
+    return read(CAMPAIGNS / cid / "config" / "campaign.json")
+
+
+def campaign_file(cid, rel):
+    """A media file belonging to one campaign: its workspace, its approved-clips folder or its legacy runs."""
+    cfg = campaign_cfg(cid)
+    if not cfg or not rel or ".." in rel.replace("\\", "/").split("/"):
+        return None
+    p = (ROOT / rel).resolve()
+    roots = [CAMPAIGNS / cid, ROOT / cfg.get("output_dir", "-"), ROOT / cfg.get("review_dir", "-")] + [ROOT / r for r in cfg.get("legacy_runs", [])]
+    ok = p.suffix.lower() in MEDIA_EXT and p.is_file() and any(p.is_relative_to(r.resolve()) for r in roots)
+    return p if ok else None
+
+
+def clip_stage(k, cid):
+    """Pipeline column. Internal editorial stages (candidate/review/approved) come from the files that exist;
+    platform and Content Rewards stages come from the registry, so they never mix."""
+    sub = k.get("submission", "")
+    if sub.startswith(("ACCEPTED", "REJECTED")):
+        return "Campaign decision"
+    if sub.startswith("SUBMITTED"):
+        return "Submitted"
+    if any(str(v).startswith("PUBLISHED") for v in (k.get("publish") or {}).values()):
+        return "Published"
+    if k.get("approved_file") and campaign_file(cid, k["approved_file"]):
+        return "Approved (internal)"
+    if k.get("review_file") and campaign_file(cid, k["review_file"]):
+        return "Review"
+    return "New candidate"
+
+
+DECISIONS = {"keep_original", "prefer_v2", "reject_v2"}
+
+
+def open_folder(body):
+    """Open a campaign's Review or Approved folder in Explorer. Only the two folders named in that campaign's config."""
+    cfg = campaign_cfg(body.get("campaign"))
+    key = {"review": "review_dir", "approved": "output_dir"}.get(body.get("which"))
+    if not cfg or not key or not cfg.get(key):
+        return "invalid request"
+    folder = (ROOT / cfg[key]).resolve()
+    if not folder.is_relative_to(ROOT.resolve()) or not folder.is_dir():
+        return "folder missing"
+    os.startfile(folder)  # Windows-only local Studio
+    return None
+
+
+def replacement_decision(body):
+    """Owner's choice between an original clip and its V2. Recorded only: no file is moved, replaced or deleted,
+    and nothing is published or submitted. Locked (published/submitted) originals stay untouched either way."""
+    cid, vid, decision = body.get("campaign"), body.get("clip"), body.get("decision")
+    if not campaign_cfg(cid) or decision not in DECISIONS:
+        return "invalid request"
+    path = CAMPAIGNS / cid / "config" / "clips.json"
+    clips = read(path, []) or []
+    v2 = next((k for k in clips if k.get("id") == vid and k.get("v2_of")), None)
+    if v2 is None:
+        return "not a V2 clip"
+    v2["replacement_decision"] = {"decision": decision, "at": time.strftime("%Y-%m-%dT%H:%M:%S"), "by": "owner via Studio",
+                                  "note": "recorded only - promotion still needs campaign.py place + checks"}
+    path.write_text(json.dumps(clips, indent=2, ensure_ascii=False), encoding="utf-8")
+    return None
+
+
+def campaigns():
+    out = []
+    for c in sorted(CAMPAIGNS.glob("*/config/campaign.json")):
+        cfg = read(c, {}) or {}
+        cid = cfg.get("id")
+        if cid != c.parent.parent.name:
+            continue
+        clips = read(c.parent / "clips.json", []) or []
+        for k in clips:
+            qa = read(CAMPAIGNS / cid / "logs" / "qa" / f"{k.get('id')}.json", {}) or {}
+            k["qa"] = qa.get("auto_result", "NOT RUN")
+            # where the file actually is now (a manual move shows up on the next poll), preferring the creator folders
+            here = next((k[f] for f in ("approved_file", "review_file", "preview", "export") if k.get(f) and campaign_file(cid, k[f])), None)
+            k["url"] = f"/campaign/{cid}/" + quote(here) if here else None
+            k["path"] = str(ROOT / here) if here else None
+            k["stage"] = clip_stage(k, cid)
+            k["ready"] = (k["stage"] == "Approved (internal)" and not k.get("blockers") and k.get("qa") == "PASS"
+                          and (k.get("score") or 0) >= cfg.get("approval_threshold", 8))
+        for k in clips:  # V2 <-> original pairing for side-by-side review
+            if k.get("v2_of"):
+                o = next((x for x in clips if x.get("id") == k["v2_of"]), {})
+                k["original"] = {"n": o.get("n"), "title": o.get("title"), "score": o.get("score"), "url": o.get("url"), "stage": o.get("stage")}
+                o.setdefault("alternatives", []).append({"id": k["id"], "title": k.get("title"), "score": k.get("score"), "url": k.get("url"),
+                                                         "decision": (k.get("replacement_decision") or {}).get("decision")})
+        for k in clips:  # version history: one card per logical clip, older renders/backups listed inside it
+            hist = k.get("versions") or []
+            k["version"] = next((h["version"] for h in hist if h.get("active")), 1)
+            k["history"] = [{"version": h["version"], "score": h.get("score"), "note": h.get("note", ""), "active": h.get("active"),
+                             "urls": [f"/campaign/{cid}/" + quote(b) for b in (h.get("backups") or []) + [h.get("export")] if b and campaign_file(cid, b)][:1]}
+                            for h in hist]
+            folder = ROOT / cfg.get("output_dir" if k.get("approved_file") else "review_dir", "-")
+            k["kit"] = all((folder / f).is_file() for f in ("UPLOAD-INFO.txt", "YOUTUBE-KIT.txt", "TIKTOK-KIT.txt", "INSTAGRAM-KIT.txt"))
+            k["missing"] = list(k.get("blockers") or []) + ([f"score {k.get('score')} < {cfg.get('approval_threshold', 8)}"]
+                                                         if (k.get("score") or 0) < cfg.get("approval_threshold", 8) else []) +                            ([f"automated QA {k['qa']}"] if k["qa"] != "PASS" else [])
+        clips = [k for k in clips if not k.get("v2_of")]  # alternatives live inside their parent card
+        counts = {}
+        for k in clips:
+            counts[k.get("status", "DRAFT")] = counts.get(k.get("status", "DRAFT"), 0) + 1
+        r, cap = cfg.get("render", {}), cfg.get("caption", {})
+        out.append({"id": cid, "name": cfg.get("name"), "streamer": cfg.get("streamer"), "status": cfg.get("status"),
+                    "platforms": cfg.get("platforms", []), "output_dir": str(ROOT / cfg.get("output_dir", "")),
+                    "review_dir": str(ROOT / cfg.get("review_dir", "")), "threshold": cfg.get("approval_threshold", 8),
+                    "verified": cfg.get("rules_verified", []),
+                    "branding": {"label": r.get("disclosure_label"), "spoken": r.get("narration_text"),
+                                 "overlay": Path(r["overlay"]["file"]).name if r.get("overlay") else None,
+                                 "first_line": cap.get("first_line"), "hashtags": cap.get("required_hashtags", []),
+                                 "phrases": cap.get("required_phrases", []), "no_urls": cap.get("forbid_urls", False)},
+                    "warnings": cfg.get("rules_manual", []), "clips": clips, "counts": counts,
+                    "runs": [Path(r).name for r in cfg.get("legacy_runs", [])]})
+    return out
 
 
 def read(path, default=None):
@@ -30,8 +152,7 @@ def read(path, default=None):
 def run_path(name):
     if not re.fullmatch(r"[\w.-]+", name) or name in {".", ".."}:
         return None
-    p = RUNS / name
-    return p if p.resolve() == RUNS.resolve() / name and (p / "run.json").is_file() else None
+    return runs.locate(ROOT, name)
 
 
 def file_path(run, parts):
@@ -142,12 +263,15 @@ def add_edit_request(body):
 
 
 def snapshot(selected):
+    camp = campaigns()
     options = []
-    for p in RUNS.glob("*"):
-        folder = run_path(p.name)
+    for name in runs.names(ROOT):
+        folder = run_path(name)
+        p = folder
         if folder and not (read(folder / "studio-archive.json", {}) or {}).get("media_removed"):
             meta = read(folder / "run.json", {}) or {}
-            options.append({"id": p.name, "title": meta.get("source", {}).get("title") or p.name,
+            owner = next((c["name"] for c in camp if p.name in c["runs"]), None)
+            options.append({"id": p.name, "campaign": owner, "title": meta.get("source", {}).get("title") or p.name,
                             "finished": meta.get("finished"), "created": meta.get("created", "")})
     options.sort(key=lambda x: (x["created"], x["id"]), reverse=True)
     recent = jobs()
@@ -157,7 +281,7 @@ def snapshot(selected):
         (j["run"] for j in running if j.get("run") in selectable), None)
     target = target or (options[0]["id"] if options else None)
     run = run_path(target) if target else None
-    result = {"runs": options, "active": running, "run": None}
+    result = {"runs": options, "active": running, "run": None, "campaigns": camp}
     if not run:
         return result
     meta = read(run / "run.json", {}) or {}
@@ -246,6 +370,13 @@ class Handler(BaseHTTPRequestHandler):
                 self.end_headers()
                 if self.command != "HEAD":
                     self.wfile.write(data)
+            elif path.startswith("/campaign/"):
+                _, _, cid, rel = (path.split("/", 3) + [""])[:4]
+                file = campaign_file(cid, rel)
+                if file:
+                    self.send_file(file)
+                else:
+                    self.send_error(404)
             elif path.startswith("/run/"):
                 _, _, name, *parts = path.split("/")
                 run = run_path(name)
@@ -265,7 +396,7 @@ class Handler(BaseHTTPRequestHandler):
         # Only the Studio page itself may write: same host, same-origin fetch, small JSON body.
         if (self.headers.get("Host") != f"{HOST}:{PORT}" or self.headers.get("Sec-Fetch-Site") not in (None, "same-origin")
                 or self.headers.get("Origin") not in (None, f"http://{HOST}:{PORT}")
-                or urlsplit(self.path).path != "/api/edit-request"
+                or urlsplit(self.path).path not in ("/api/edit-request", "/api/replacement-decision", "/api/open-folder")
                 or not self.headers.get("Content-Type", "").startswith("application/json")):
             self.send_error(403)
             return
@@ -274,7 +405,10 @@ class Handler(BaseHTTPRequestHandler):
             self.send_error(413)
             return
         try:
-            error = add_edit_request(json.loads(self.rfile.read(length)))
+            body = json.loads(self.rfile.read(length))
+            route = urlsplit(self.path).path
+            error = (replacement_decision(body) if route == "/api/replacement-decision"
+                     else open_folder(body) if route == "/api/open-folder" else add_edit_request(body))
         except (ValueError, OSError):
             error = "invalid request"
         self.send_response(400 if error else 201)

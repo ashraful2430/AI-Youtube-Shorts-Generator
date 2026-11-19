@@ -21,8 +21,9 @@ def main():
     ap.add_argument("--run", required=True)
     ap.add_argument("--hours", type=float, default=12)
     a = ap.parse_args()
-    run = ROOT / "work" / "runs" / a.run
-    if not (run / "run.json").is_file():
+    from shorts_generator.local.runs import locate
+    run = locate(ROOT, a.run)
+    if run is None:
         raise SystemExit(f"no run {a.run}")
     log, stop = run / "live-log.txt", run / "STOP-LIVE-SESSION"
     log.touch()

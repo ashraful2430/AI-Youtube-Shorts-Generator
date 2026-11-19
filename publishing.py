@@ -29,6 +29,15 @@ def inside(root, path):
     return path
 
 
+def run_folder(root, path):
+    from shorts_generator.local.runs import roots
+    path = Path(path).absolute()
+    for base in roots(root):
+        if path.parent == base.absolute():
+            return inside(base.absolute(), path)
+    raise ValueError(f"Unsafe file path: {path}")
+
+
 def register(parser, root, run_dir, read):
     root = Path(root).resolve()
 
@@ -73,7 +82,7 @@ def register(parser, root, run_dir, read):
                         consider(path, UPLOAD, record["sha256"])
 
                 if a.run and a.rejected_only:
-                    folder = inside(root / "work/runs", run_dir(a.run))
+                    folder = run_folder(root, run_dir(a.run))
                     run = read(folder / "run.json")
                     for c in read(folder / "candidates.json", []):
                         if run.get("finished") and c["status"] == "rejected":
@@ -132,7 +141,7 @@ def register(parser, root, run_dir, read):
                     print(f"To apply this preview, repeat the same options with --confirm {token}")
                 return
 
-            folder = inside(root / "work/runs", run_dir(a.run))
+            folder = run_folder(root, run_dir(a.run))
             run = read(folder / "run.json")
             candidates = read(folder / "candidates.json", [])
             if a.cmd == "review":

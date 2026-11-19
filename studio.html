@@ -8,14 +8,14 @@
 @media(max-width:820px){header{padding:0 14px}.shell{display:block}.side{border-right:0;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:10px 14px}.side select{width:min(72vw,370px);margin:0}.side h2{display:none}#stages{display:flex;overflow:auto;gap:5px;max-width:100%;white-space:nowrap}.stage{padding:6px}.grid{grid-template-columns:1fr}.work{padding:12px}.screen{min-height:265px}.slot video{min-height:160px}.top{margin-bottom:12px}.cut-list{margin-left:0}}
 
 .shell{display:block;max-width:1180px}.side{display:flex;align-items:center;gap:12px;border:0;padding:16px 26px 0}.side select{width:min(100%,345px);margin:0}.work{padding-top:16px}.grid{display:block}.screen{min-height:300px}.slot video{height:clamp(260px,56vh,625px)}.top .eyebrow{display:none}.top h1{font-size:clamp(17px,2.3vw,24px)}.top .muted{display:none}.details>div:last-child{margin-bottom:0}details.panel{margin-top:9px}.tools{margin-top:14px}.brand .pill{display:none}.progress:empty{display:none}
-.reels{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:14px}.reel{padding:12px;display:flex;flex-direction:column;gap:8px}.reel video{width:100%;aspect-ratio:9/16;background:#09090c;border-radius:7px}.reel textarea{width:100%;min-height:64px;background:#14141c;color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:8px;font:inherit;resize:vertical}.reel .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.reel a.small-button{border:1px solid var(--line);border-radius:8px;text-decoration:none}.reel .req{border-top:1px solid var(--line);padding-top:6px}
+.reels{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:14px}.reel{padding:12px;display:flex;flex-direction:column;gap:8px}.reel video{width:100%;aspect-ratio:9/16;background:#09090c;border-radius:7px}.reel textarea{width:100%;min-height:64px;background:#14141c;color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:8px;font:inherit;resize:vertical}.reel .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.reel a.small-button{border:1px solid var(--line);border-radius:8px;text-decoration:none}.camp{padding:12px;margin-bottom:14px}.camp h2{margin:0 0 4px}.camp .tags span{display:inline-block;border:1px solid var(--line);border-radius:6px;padding:1px 6px;margin:2px 4px 2px 0;font-size:12px}.camp .warn{color:#f5b041}.st{font-weight:700}.reel .req{border-top:1px solid var(--line);padding-top:6px}
 @media(max-width:650px){.side{padding:12px 12px 0}.side select{width:min(70vw,345px)}.work{padding-top:11px}.top{flex-wrap:wrap}.slot video{height:clamp(215px,51vh,480px);min-height:0}.screen{min-height:0}}
 </style>
 <header><div class="brand"><span class="logo">VCI</span> Vice City Intel <span class="pill">Editing Studio</span></div><span id="connection" class="pill" role="status">Connecting</span></header>
 <div class="shell"><aside class="side"><label for="runs">Run</label><select id="runs"></select></aside>
 <main class="work"><div class="top"><div><div class="eyebrow">Workspace</div><h1 id="title">Loading local run</h1><div id="source" class="muted"></div></div><span id="state" class="pill" role="status"></span></div>
-<nav class="toolbar" aria-label="Studio views"><button data-mode="review" aria-pressed="true">Video</button><button data-mode="reels">Reels</button><button data-mode="compare">Compare</button><button data-mode="source">Source</button><button data-mode="gallery">Gallery</button><button id="memeDirector" data-mode="meme" hidden>Meme Director</button></nav>
-<div id="reelsPanel" class="reels" hidden></div>
+<nav class="toolbar" aria-label="Studio views"><button data-mode="review" aria-pressed="true">Video</button><button data-mode="reels">Reels</button><button data-mode="campaigns">Campaigns</button><button data-mode="compare">Compare</button><button data-mode="source">Source</button><button data-mode="gallery">Gallery</button><button id="memeDirector" data-mode="meme" hidden>Meme Director</button></nav>
+<div id="reelsPanel" class="reels" hidden></div><div id="campaignsPanel" hidden></div>
 <div id="galleryPanel" class="panel" hidden><iframe id="gallery" class="gallery" title="Existing review gallery" sandbox="allow-same-origin allow-popups"></iframe></div>
 <div id="production">
 <div class="grid"><section class="panel"><div class="head"><h2 id="viewerTitle">Review preview</h2><span class="muted" id="viewerLabel"></span></div>
@@ -63,7 +63,7 @@ function timeline(item){
 }
 function paint(){
  if(!data)return;
- const run=data.run, list=data.runs.map(x=>({url:x.id,name:x.id}));
+ const run=data.run, list=data.runs.map(x=>({url:x.id,name:(x.campaign?'['+x.campaign.split(' - ')[0]+'] ':'')+x.id}));
  setOptions($('runs'),list,run?.id);
  $('connection').textContent='● Local workspace';$('connection').className='pill live';
  $('title').textContent=run?.title||'No saved run yet';
@@ -85,8 +85,9 @@ function paint(){
  }
  const embedded=mode==='meme'?run?.meme_director:mode==='gallery'?run?.gallery:null;
  const showPanel=mode==='gallery'||mode==='meme';
- $('galleryPanel').hidden=!showPanel;$('production').hidden=showPanel||mode==='reels';$('reelsPanel').hidden=mode!=='reels';
+ $('galleryPanel').hidden=!showPanel;$('production').hidden=showPanel||mode==='reels'||mode==='campaigns';$('reelsPanel').hidden=mode!=='reels';$('campaignsPanel').hidden=mode!=='campaigns';
  if(mode==='reels')reels(run);
+ if(mode==='campaigns')campaignsView(data?.campaigns||[]);
  $('gallery').hidden=!embedded;
  if(embedded&&galleryUrl!==embedded.url+'?v='+embedded.modified){galleryUrl=embedded.url+'?v='+embedded.modified;$('gallery').src=galleryUrl;}
  const versions=[...(run?.versions||[]),...(run?.previews||[])];
@@ -145,6 +146,56 @@ function reels(run){
   const mine=reqs.filter(r=>r.file===v.name);
   card.append(vid,...(v.label?[make('h3',v.label)]:[]),make('p',v.name,'path'),note,row,...mine.map(r=>make('p',new Date(r.at*1000).toLocaleString()+' · '+r.status+' · '+r.note,'muted req')));
   return card;}));
+}
+let campSel='all',campSig='';
+function campaignsView(list){
+ const sig=campSel+'|'+JSON.stringify(list.map(c=>[c.id,c.status,c.clips.map(k=>[k.status,k.stage,k.score,k.qa,k.url,k.submission,k.publish,k.replacement_decision])]));
+ if(sig===campSig)return; campSig=sig; // repaint only on change (keeps playback)
+ const box=$('campaignsPanel');const sel=make('select');sel.setAttribute('aria-label','Campaign');
+ for(const [v,t] of [['all','All campaigns'],...list.map(c=>[c.id,c.name])]){const o=make('option',t);o.value=v;o.selected=v===campSel;sel.append(o);}
+ sel.onchange=e=>{campSel=e.target.value;campSig='';campaignsView(list);};
+ const parts=[make('p','Campaign',''),sel];
+ for(const c of list.filter(c=>campSel==='all'||c.id===campSel)){
+  const sec=make('section',undefined,'panel camp');
+  sec.append(make('h2',c.name+' — '+c.status),make('p','Streamer: '+c.streamer+' · Platforms: '+c.platforms.join(', ')+' · Clips: '+c.clips.length+' ('+Object.entries(c.counts).map(([k,v])=>v+' '+k).join(', ')+')','muted'),
+   (()=>{const r=make('p');for(const [w,lab,pth] of [['review','Open Review Clips folder',c.review_dir],['approved','Open Approved Clips folder',c.output_dir]]){const b=make('button',lab);b.title=pth;b.onclick=async()=>{const x=await fetch('/api/open-folder',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({campaign:c.id,which:w})});if(!x.ok)b.textContent=lab+' (failed)';};r.append(b);}return r;})(),
+   make('p','Approved folder: '+c.output_dir,'path'),make('p','Review folder: '+c.review_dir,'path'),
+   make('p','Internal gate: score ≥ '+c.threshold+' + automated QA + no blockers. Internal approval is NOT Content Rewards approval.','muted'));
+  const b=c.branding,tags=make('p',undefined,'tags');
+  for(const t of ['On-screen: '+b.label,'Spoken: '+b.spoken,'Caption first line: '+b.first_line,...b.hashtags,...b.phrases.map(x=>'"'+x+'"'),b.no_urls?'No URLs in captions':null,b.overlay?'Overlay: '+b.overlay+' (whole clip)':null].filter(Boolean))tags.append(make('span',t));
+  sec.append(make('h3','Required branding & captions'),tags);
+  const v=make('details');v.append(make('summary','Requirements verified ('+c.verified.length+')'),...c.verified.map(x=>make('p','✓ '+x,'muted')));sec.append(v);
+  const w=make('details');w.append(make('summary','Compliance warnings ('+c.warnings.length+') — manual checks'),...c.warnings.map(x=>make('p','⚠ '+x,'warn')));sec.append(w);
+  for(const stage of ['New candidate','Review','Approved (internal)','Published','Submitted','Campaign decision']){
+  const ks=c.clips.filter(k=>k.stage===stage);sec.append(make('h3',stage+' ('+ks.length+')'));if(!ks.length)continue;
+  const grid=make('div',undefined,'reels');
+  for(const k of ks.sort((a,b)=>b.score-a.score||a.n.localeCompare(b.n))){
+   const card=make('section',undefined,'panel reel');
+   if(k.url){const v=make('video');v.controls=true;v.preload='metadata';v.playsInline=true;v.src=k.url+'#t=0.5';card.append(v);}
+   card.append(make('h3','#'+k.n+' · '+k.title+' · '+k.score+'/10'),make('p','Internal: '+k.stage+' · Registry: '+k.status,'st'),
+    make('p','QA: '+k.qa,'muted'),make('p','Publishing: '+Object.entries(k.publish).map(([p,s])=>p+' '+s).join(' · ')+' · Submission: '+k.submission,'muted'),
+    make('p','Source: '+(k.vod_url||k.vod)+' '+k.vod_timestamps,'path'),make('p','File: '+(k.path||'missing'),'path'));
+   const tags=[k.director==='V2'?'Director V2':null,k.rediscovered?'Rediscovered moment':null,k.v2_of?'V2 of #'+(k.original?.n||k.v2_of):null,k.locked?'LOCKED (published/submitted)':null,k.ready?'READY TO PUBLISH (internal)':null].filter(Boolean);
+   if(tags.length){const t=make('p',undefined,'tags');tags.forEach(x=>t.append(make('span',x)));card.append(t);}
+   card.append(make('p','Streamer: '+k.streamer+' · Campaign: '+c.name+' · Version: v'+k.version+' · Publishing kit: '+(k.kit?'ready':'missing'),'muted'));
+   if(k.missing?.length)card.append(make('p','Missing before approval: '+k.missing.join('; '),'warn'));
+   if(k.history?.length>1){const d=make('details');d.append(make('summary','Version history ('+k.history.length+')'));for(const h of k.history){d.append(make('p','v'+h.version+(h.active?' (active)':'')+' · '+h.score+'/10 · '+h.note,'muted'));if(h.urls[0]&&!h.active){const v=make('video');v.controls=true;v.preload='none';v.playsInline=true;v.src=h.urls[0];d.append(v);}}card.append(d);}
+   if(k.alternatives?.length){const d=make('details');d.append(make('summary','Alternative cuts ('+k.alternatives.length+') - not active'));for(const a of k.alternatives){d.append(make('p',a.title+' · '+a.score+'/10'+(a.decision?' · owner: '+a.decision:''),'muted'));if(a.url){const v=make('video');v.controls=true;v.preload='none';v.playsInline=true;v.src=a.url;d.append(v);}const row=make('p');for(const [dv,lab] of [['keep_original','Keep active version'],['prefer_v2','Prefer this cut'],['reject_v2','Reject this cut']]){const b=make('button',lab);b.onclick=async()=>{const r=await fetch('/api/replacement-decision',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({campaign:c.id,clip:a.id,decision:dv})});b.textContent=r.ok?lab+' ✓':lab+' (failed)';};row.append(b);}d.append(row);}card.append(d);}
+   if(k.headline)card.append(make('p','Headline: '+k.headline.text,'st'),make('p','Why it is true: '+k.headline.truthful_because,'muted'));
+   if(k.score_breakdown)card.append(make('p','Scores: '+Object.entries(k.score_breakdown).map(([a,b])=>a.replaceAll('_',' ')+' '+b).join(' · ')+(k.previous_score?' · previous version '+k.previous_score:''),'muted'));
+   if(k.discovery)card.append(make('p','Found by: '+k.discovery,'muted'));
+   if(k.changes)card.append(make('p','Changes: '+k.changes,'muted'));
+   if(k.issues?.length)card.append(make('p','Issues / missing context: '+k.issues.join('; '),'warn'));
+   if(k.blockers?.length)card.append(make('p','Blockers: '+k.blockers.join('; '),'warn'));
+   if(k.v2_of&&k.original){const d=make('details');d.append(make('summary','Compare with original #'+k.original.n+' ('+k.original.score+'/10, '+k.original.stage+')'));
+    if(k.original.url){const v=make('video');v.controls=true;v.preload='metadata';v.playsInline=true;v.src=k.original.url+'#t=0.5';d.append(v);}
+    if(k.comparison_vs_original)d.append(...Object.entries(k.comparison_vs_original).map(([a,b])=>make('p',a.replaceAll('_',' ')+': '+b,'muted')));
+    const row=make('p');for(const [dv,lab] of [['keep_original','Keep original'],['prefer_v2','Prefer V2'],['reject_v2','Reject V2']]){const b=make('button',lab);b.onclick=async()=>{const r=await fetch('/api/replacement-decision',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({campaign:c.id,clip:k.id,decision:dv})});b.textContent=r.ok?lab+' ✓ recorded':lab+' (failed)';};row.append(b);}
+    d.append(row,make('p','Decision is recorded only — no file is moved, replaced, published or submitted.'+(k.replacement_decision?' Current: '+k.replacement_decision.decision+' ('+k.replacement_decision.at+')':''),'muted'));card.append(d);}
+   grid.append(card);}
+  sec.append(grid);}
+  parts.push(sec);}
+ box.replaceChildren(...parts);
 }
 async function refresh(){if(busy)return;busy=true;try{const r=await fetch('/api/studio'+(selected?'/'+encodeURIComponent(selected):''),{cache:'no-store'});if(!r.ok)throw Error();const next=await r.json();if(selected&&!next.runs.some(r=>r.id===selected))selected='';if(data?.run?.id!==next.run?.id){current={};galleryUrl='';$('gallery').removeAttribute('src');}data=next;paint();}catch{$('connection').textContent='Connection unavailable';$('connection').className='pill';}finally{busy=false;}}
 $('runs').onchange=e=>{selected=e.target.value;current={};refresh();};

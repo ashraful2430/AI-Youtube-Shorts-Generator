@@ -65,3 +65,63 @@ with tempfile.TemporaryDirectory() as temp:
             server.shutdown()
             thread.join()
 print("studio checks passed")
+
+# campaign stages follow the files that exist, and stay separate from campaign/platform status
+with tempfile.TemporaryDirectory() as temp:
+    studio.ROOT = Path(temp)
+    studio.CAMPAIGNS = studio.ROOT / "campaigns"
+    cfgd = studio.CAMPAIGNS / "demo" / "config"
+    cfgd.mkdir(parents=True)
+    (cfgd / "campaign.json").write_text(json.dumps({"id": "demo", "output_dir": "Approved Clips/Demo", "review_dir": "Review Clips/Demo"}), encoding="utf8")
+    (studio.ROOT / "Review Clips" / "Demo").mkdir(parents=True)
+    (studio.ROOT / "Review Clips" / "Demo" / "01.mp4").write_bytes(b"x")
+    k = {"review_file": "Review Clips/Demo/01.mp4", "approved_file": "Approved Clips/Demo/01.mp4", "publish": {}, "submission": "NOT SUBMITTED"}
+    assert studio.clip_stage(k, "demo") == "Review"  # approved copy missing on disk -> still Review
+    assert studio.campaign_file("demo", "Review Clips/Demo/01.mp4")
+    assert not studio.campaign_file("demo", "Review Clips/Other/01.mp4")
+    assert studio.clip_stage({**k, "publish": {"TikTok": "PUBLISHED"}}, "demo") == "Published"
+    assert studio.clip_stage({**k, "submission": "REJECTED"}, "demo") == "Campaign decision"
+print("campaign stage checks passed")
+
+# run folders: campaign workspace copy wins over the preserved legacy original; names stay plain
+from shorts_generator.local import runs as run_roots
+with tempfile.TemporaryDirectory() as temp:
+    root = Path(temp)
+    for base in (root / "work" / "runs" / "r1", root / "campaigns" / "kai" / "work" / "runs" / "r1", root / "work" / "runs" / "r2"):
+        base.mkdir(parents=True)
+        (base / "run.json").write_text("{}", encoding="utf8")
+    assert run_roots.locate(root, "r1") == root / "campaigns" / "kai" / "work" / "runs" / "r1"
+    assert run_roots.locate(root, "r2") == root / "work" / "runs" / "r2"
+    assert run_roots.locate(root, "..") is None and run_roots.locate(root, "r1/../r2") is None
+    assert run_roots.names(root) == ["r1", "r2"]
+    assert run_roots.project_root(root / "campaigns" / "kai" / "work" / "runs" / "r1") == root.resolve()
+    assert run_roots.project_root(root / "work" / "runs" / "r2") == root.resolve()
+print("run location checks passed")
+
+# replacement decisions: recorded on V2 clips only, whitelisted values, nothing else touched
+with tempfile.TemporaryDirectory() as temp:
+    studio.ROOT = Path(temp)
+    studio.CAMPAIGNS = studio.ROOT / "campaigns"
+    cfgd = studio.CAMPAIGNS / "demo" / "config"
+    cfgd.mkdir(parents=True)
+    (cfgd / "campaign.json").write_text(json.dumps({"id": "demo", "output_dir": "Approved Clips/Demo"}), encoding="utf8")
+    (cfgd / "clips.json").write_text(json.dumps([{"id": "a"}, {"id": "a2", "v2_of": "a"}]), encoding="utf8")
+    assert studio.replacement_decision({"campaign": "demo", "clip": "a", "decision": "prefer_v2"}) == "not a V2 clip"
+    assert studio.replacement_decision({"campaign": "demo", "clip": "a2", "decision": "delete"}) == "invalid request"
+    assert studio.replacement_decision({"campaign": "../x", "clip": "a2", "decision": "prefer_v2"}) == "invalid request"
+    assert studio.replacement_decision({"campaign": "demo", "clip": "a2", "decision": "keep_original"}) is None
+    saved = json.loads((cfgd / "clips.json").read_text(encoding="utf8"))
+    assert saved[1]["replacement_decision"]["decision"] == "keep_original" and "replacement_decision" not in saved[0]
+print("replacement decision checks passed")
+
+# open-folder only accepts the two configured creator folders
+with tempfile.TemporaryDirectory() as temp:
+    studio.ROOT = Path(temp)
+    studio.CAMPAIGNS = studio.ROOT / "campaigns"
+    cfgd = studio.CAMPAIGNS / "demo" / "config"
+    cfgd.mkdir(parents=True)
+    (cfgd / "campaign.json").write_text(json.dumps({"id": "demo", "output_dir": "../outside", "review_dir": "Review Clips/Demo"}), encoding="utf8")
+    assert studio.open_folder({"campaign": "demo", "which": "elsewhere"}) == "invalid request"
+    assert studio.open_folder({"campaign": "demo", "which": "approved"}) == "folder missing"  # escapes ROOT
+    assert studio.open_folder({"campaign": "demo", "which": "review"}) == "folder missing"    # not created
+print("open-folder checks passed")

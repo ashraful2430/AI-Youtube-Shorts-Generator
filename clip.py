@@ -20,6 +20,7 @@ ROOT = os.getenv("CLIP_ROOT", r"D:\GTA-VI-Clipping")
 RUNS = os.path.join(ROOT, "work", "runs")
 from publishing import register
 from shorts_generator.local import studio_events as studio
+from shorts_generator.local import runs as run_roots
 
 
 def load_campaign(name: str) -> dict:
@@ -34,11 +35,11 @@ def load_campaign(name: str) -> dict:
 
 
 def run_dir(run_id: str) -> str:
-    d = os.path.normpath(os.path.join(RUNS, run_id))
-    # Trust boundary: a run id must name exactly one folder directly under work/runs.
-    if os.path.dirname(d) != os.path.normpath(RUNS) or not os.path.exists(os.path.join(d, "run.json")):
-        sys.exit(f"No run {run_id!r} in {RUNS} (see: clip runs)")
-    return d
+    # Trust boundary: a run id must name exactly one folder directly under work/runs or campaigns/<id>/work/runs.
+    d = run_roots.locate(ROOT, run_id)
+    if d is None:
+        sys.exit(f"No run {run_id!r} in {RUNS} or campaigns/*/work/runs (see: clip runs)")
+    return str(d)
 
 
 def read(path, default=None):
@@ -167,16 +168,18 @@ def cmd_polish(a):
 
 
 def cmd_runs(a):
-    if not os.path.isdir(RUNS):
+    names = run_roots.names(ROOT)
+    if not names:
         print("no runs yet")
         return
-    for r in sorted(os.listdir(RUNS)):
-        run = read(os.path.join(RUNS, r, "run.json"))
+    for r in names:
+        d = str(run_roots.locate(ROOT, r))
+        run = read(os.path.join(d, "run.json"))
         if not run:
             continue
-        cands = read(os.path.join(RUNS, r, "candidates.json"), [])
+        cands = read(os.path.join(d, "candidates.json"), [])
         kept = sum(c["status"] == "candidate" for c in cands)
-        print(f"{r}  {size_of([os.path.join(RUNS, r)]) / 1e6:8.1f} MB  "
+        print(f"{r}  {size_of([d]) / 1e6:8.1f} MB  "
               f"{'done' if run.get('finished') else 'unfinished'}  {kept} candidates  {run['source']['title']}")
 
 

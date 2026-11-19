@@ -130,10 +130,11 @@ def track_render(function):
     def wrapped(plan, out_path, overlay=None):
         if _active is not None:
             return function(plan, out_path, overlay)
+        from .runs import project_root
         run = Path(os.environ.get("LOCAL_OUTPUT_DIR", "")).resolve()
-        if run.parent.name != "runs" or run.parent.parent.name != "work" or not (run / "run.json").is_file():
+        if (root := project_root(run)) is None:
             return function(plan, out_path, overlay)
-        with job(run.parents[2], "render", run.name):
+        with job(root, "render", run.name):
             stage("Timeline assembly", "Using the supplied edit plan")
             return function(plan, out_path, overlay)
     return wrapped
