@@ -1,0 +1,59 @@
+{
+  "version": "2026-11-14.2",
+  "verified_on": "2026-11-14",
+  "status": "PASS",
+  "sources": [
+    "https://contentrewards.com/c/campaigns/9a53cf91-e0ac-4157-bed0-81eb7095827d",
+    "https://contentrewards.com/terms",
+    "https://contentrewards.com/ftc-compliance",
+    "https://drive.google.com/drive/folders/1vHBDqksw6K-m3TU06vJ6nMjH5R8uwypy?usp=drive_link"
+  ],
+  "public_campaign": {
+    "source": "Original SkiiMaskTimmy Twitch streams or VODs",
+    "facecam": "Visible",
+    "branding": "Twitch.tv/skiimasktimmy overlay on every clip"
+  },
+  "content_rewards": {
+    "all": "Conspicuous on-screen disclosure at the beginning, written near the beginning, native disclosure where available",
+    "oral": "Required by general short-form rule if publishing creator appears or provides VO. YouTube independently requires oral disclosure. Use a distinct publisher narrator for the shared export.",
+    "youtube": "Paid promotion setting, written description, caption-file disclosure if supplied, disclosed thumbnail when creator image appears or content is promotion-focused",
+    "instagram": "Paid Partnership label where applicable and #Ad or equivalent at the beginning",
+    "tiktok": "Branded content disclosure setting and written disclosure in the description"
+  },
+  "working_profile_from_project_brief": {
+    "language": "English captions",
+    "orientation": "Vertical 9:16",
+    "min_seconds": 7,
+    "original_audio": true,
+    "unrelated_footage_or_unauthorized_audio": false
+  },
+  "unverified": [
+    "Direct comparison of local overlay asset with the linked Drive reference.",
+    "Per-export manual playback and captions; verify audience and post settings separately before submission."
+  ],
+  "joined_brief_evidence": "ClippedIn Campaign Guidelines supplied by the user with a screenshot of the joined Content Rewards campaign.",
+  "joined_campaign": {
+    "source": "SkiiMaskTimmy Twitch livestreams and VODs only. No clips taken from his channel or clipping channels, recycled social edits, other creators, trailers or unrelated footage.",
+    "formats": [
+      "clutch plays",
+      "extraction tension",
+      "funny moments and fails",
+      "first impressions",
+      "genuine reactions",
+      "community moments"
+    ],
+    "branding": "Use the campaign Twitch overlay. Keep Timmy's facecam and twitch.tv/skiimasktimmy on screen.",
+    "audio": "Keep the original stream audio audible. Do not cover Timmy's voice with music.",
+    "format": "Vertical 9:16, gameplay and facecam, English, at least seven seconds.",
+    "distribution": "TikTok, Instagram Reels, YouTube Shorts. Comments and likes on. No collabs or story boosting. Dedicated page recommended.",
+    "post_caption": "Include twitch.tv/skiimasktimmy and relevant tags such as #skiimasktimmy, #twitchclips, #fps, #gaming and the game name.",
+    "audience": "60%+ Tier 1 audience; gaming preferred.",
+    "minimum_engagement": {
+      "under_25000_views": "0.9%",
+      "25000_to_100000_views": "0.8%",
+      "100000_plus_views": "0.5%"
+    },
+    "submission": "Submit through Content Rewards only. After 2,000 views, send a screen recording of video-specific watch times, view graphs and geographic analytics through the designated analytics submission form channel."
+  },
+  "paid_disclosure_required": true
+}

@@ -1,0 +1,11 @@
+{
+  "name": "SkiiMaskTimmy",
+  "file_prefix": "SkiiMaskTimmy",
+  "allowed_channels": ["skiimasktimmy"],
+  "overlay": "assets/SkiiMaskTimmy Twitch Overlay.png",
+  "facecam_box": [0.7676, 0.7104, 0.2230, 0.2208],
+  "require_facecam": true,
+  "no_third_party_media": true,
+  "content_kind": "gaming livestream",
+  "language": "en"
+}

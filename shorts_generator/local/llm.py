@@ -31,7 +31,7 @@ def call_openai_llm(prompt: str) -> str:
     return response.choices[0].message.content or ""
 
 
-def call_gemini_llm(prompt: str) -> str:
+def call_gemini_llm(prompt: str, images: list = None) -> str:
     """Gemini backend used by --mode local when LLM_PROVIDER=gemini."""
     try:
         from google import genai  # type: ignore
@@ -50,13 +50,14 @@ def call_gemini_llm(prompt: str) -> str:
     # Try the configured model first, then fallbacks (retired / overloaded
     # models return 404 / 5xx; quota exhaustion returns 429).
     models = [GEMINI_MODEL] + [m for m in GEMINI_FALLBACK_MODELS if m != GEMINI_MODEL]
+    contents = [prompt] + [types.Part.from_bytes(data=img, mime_type="image/jpeg") for img in images or []]
     failures = []
     for model in models:
-        for attempt in range(1, 3):
+        for attempt in range(1, 4):
             try:
                 response = client.models.generate_content(
                     model=model,
-                    contents=prompt,
+                    contents=contents,
                     config={
                         "temperature": 0.2,
                         "response_mime_type": "application/json",
@@ -68,6 +69,10 @@ def call_gemini_llm(prompt: str) -> str:
                 return response.text or ""
             except errors.APIError as e:
                 failures.append(f"{model}: HTTP {e.code} {str(e.message or '')[:160]}")
+                if e.code in (500, 502, 503, 504) and attempt < 3:
+                    print(f"[llm/gemini] {model} busy (HTTP {e.code}); retrying in {20 * attempt}s", flush=True)
+                    time.sleep(20 * attempt)  # "high demand" spikes are usually gone within a minute
+                    continue
                 if e.code == 429:
                     print(f"[llm/gemini] {model} quota/rate limit hit (429); trying next model", flush=True)
                 break  # 4xx/5xx from the API: move on to the next model

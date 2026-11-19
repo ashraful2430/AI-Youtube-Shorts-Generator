@@ -141,6 +141,38 @@ def _even(v: float) -> int:
     return max(2, int(round(v / 2.0)) * 2)
 
 
+def parse_facecam_box() -> Tuple[float, float, float, float]:
+    box = os.getenv("FACECAM_BOX", "").strip()
+    if not box:
+        raise RuntimeError(
+            "split layout needs FACECAM_BOX=x,y,w,h (fractions of the frame, e.g. 0.7676,0.7104,0.2230,0.2208)"
+        )
+    fx, fy, fw, fh = (float(v) for v in box.split(","))
+    return fx, fy, fw, fh
+
+
+def split_geometry(source_path: str, box: Tuple[float, float, float, float]) -> Dict:
+    """Pixel geometry of the 1080x1920 split layout (facecam / overlay band / gameplay)."""
+    fx, fy, fw, fh = box
+    src_w, src_h, fps = _probe_video(source_path)
+    W, H, BAND = 1080, 1920, 200
+    cam_x, cam_y = int(fx * src_w), int(fy * src_h)
+    cam_w, cam_h = _even(fw * src_w), _even(fh * src_h)
+    cam_out_h = _even(W * cam_h / cam_w)
+    game_y = cam_out_h + BAND
+    game_out_h = H - game_y
+    game_w = min(src_w, _even(src_h * W / game_out_h))
+    # Centre the gameplay crop, but slide it away from whichever side the facecam is on.
+    centre = (src_w - game_w) // 2
+    if cam_x + cam_w / 2 < src_w / 2:
+        game_x = min(src_w - game_w, max(centre, cam_x + cam_w))
+    else:
+        game_x = max(0, min(centre, cam_x - game_w))
+    return dict(src_w=src_w, src_h=src_h, fps=fps, W=W, H=H, BAND=BAND,
+                cam_x=cam_x, cam_y=cam_y, cam_w=cam_w, cam_h=cam_h, cam_out_h=cam_out_h,
+                game_x=game_x, game_w=game_w, game_y=game_y, game_out_h=game_out_h)
+
+
 _SCENE_REF_CACHE: Dict[str, object] = {}
 
 
@@ -191,7 +223,7 @@ def _cam_scene_intervals(source_path: str, box: Tuple[float, float, float, float
         if ref is False:
             return []
 
-        step = 0.5
+        step = float(os.getenv("SCENE_STEP_SECONDS", "0.25"))
         hidden: List[Tuple[float, float]] = []
         t = start
         while t < end:
@@ -203,7 +235,8 @@ def _cam_scene_intervals(source_path: str, box: Tuple[float, float, float, float
                 else:
                     hidden.append((a, b))
             t += step
-        return hidden
+        # Real scene switches last seconds; shorter blips are overlay animations.
+        return [(a, b) for a, b in hidden if b - a >= 0.6]
     finally:
         cap.release()
 
@@ -216,26 +249,16 @@ def _render_split(source_path: str, start: float, end: float, out_path: str) -> 
     Bottom: centre crop of the gameplay, shifted so it excludes the facecam.
     Original audio is kept as-is (re-encoded to AAC), nothing is mixed in.
     """
-    box = os.getenv("FACECAM_BOX", "").strip()
-    if not box:
-        raise RuntimeError(
-            "--layout split needs FACECAM_BOX=x,y,w,h (fractions of the frame, e.g. 0.7676,0.7104,0.2230,0.2208)"
-        )
-    fx, fy, fw, fh = (float(v) for v in box.split(","))
+    fx, fy, fw, fh = parse_facecam_box()
     overlay = os.getenv("OVERLAY_PATH", "").strip()
     if overlay and not os.path.isfile(overlay):
         raise RuntimeError(f"OVERLAY_PATH does not exist: {overlay}")
 
-    src_w, src_h, fps = _probe_video(source_path)
-    W, H, BAND = 1080, 1920, 200
-    cam_x, cam_y = int(fx * src_w), int(fy * src_h)
-    cam_w, cam_h = _even(fw * src_w), _even(fh * src_h)
-    cam_out_h = _even(W * cam_h / cam_w)
-    game_y = cam_out_h + BAND
-    game_out_h = H - game_y
-    game_w = min(src_w, _even(src_h * W / game_out_h))
-    # Centre the gameplay crop, but slide left if it would include the facecam.
-    game_x = max(0, min((src_w - game_w) // 2, cam_x - game_w))
+    g = split_geometry(source_path, (fx, fy, fw, fh))
+    src_w, src_h, fps = g["src_w"], g["src_h"], g["fps"]
+    W, H, BAND = g["W"], g["H"], g["BAND"]
+    cam_x, cam_y, cam_w, cam_h, cam_out_h = g["cam_x"], g["cam_y"], g["cam_w"], g["cam_h"], g["cam_out_h"]
+    game_x, game_w, game_y, game_out_h = g["game_x"], g["game_w"], g["game_y"], g["game_out_h"]
     dur = end - start
 
     # Where the corner facecam disappears (full-screen camera scene), the top

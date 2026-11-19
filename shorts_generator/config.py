@@ -18,7 +18,7 @@ GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.5-flash")
 # Tried in order if GEMINI_MODEL is retired, overloaded, or out of free quota.
 GEMINI_FALLBACK_MODELS = [
     m.strip()
-    for m in os.getenv("GEMINI_FALLBACK_MODELS", "gemini-3.5-flash,gemini-3.5-flash-lite,gemini-2.5-flash-lite").split(",")
+    for m in os.getenv("GEMINI_FALLBACK_MODELS", "gemini-3.5-flash,gemini-3.5-flash-lite,gemini-3.1-flash-lite").split(",")
     if m.strip()
 ]
 GEMINI_TIMEOUT_SECONDS = int(os.getenv("GEMINI_TIMEOUT_SECONDS", "180"))
