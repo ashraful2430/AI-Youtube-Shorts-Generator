@@ -48,7 +48,7 @@ def clip_stage(k, cid):
         return "Campaign decision"
     if sub.startswith("SUBMITTED"):
         return "Submitted"
-    if any(str(v).startswith("PUBLISHED") for v in (k.get("publish") or {}).values()):
+    if k.get("status") == "PUBLISHED" or any(str(v).startswith("PUBLISHED") for v in (k.get("publish") or {}).values()):
         return "Published"
     if k.get("approved_file") and campaign_file(cid, k["approved_file"]):
         return "Approved (internal)"
@@ -125,7 +125,7 @@ def campaigns():
             folder = ROOT / cfg.get("output_dir" if k.get("approved_file") else "review_dir", "-")
             kits = ["UPLOAD-INFO.txt"] + [f"{name}-KIT.txt" for name in ("YOUTUBE", "TIKTOK", "INSTAGRAM") if any(name.lower() in p.lower() for p in platforms)]
             k["kit"] = all((folder / f).is_file() for f in kits)
-            k["missing"] = (["HOLD: publish status unverified - owner to confirm URL"] if (k.get("locked") or {}).get("pending_verification") else []) + list(k.get("blockers") or []) + ([f"score {k.get('score')} < {cfg.get('approval_threshold', 8)}"]
+            k["missing"] = (["Publication details pending: " + ", ".join(k.get("publication_details_pending", []))] if (k.get("locked") or {}).get("pending_verification") else []) + list(k.get("blockers") or []) + ([f"score {k.get('score')} < {cfg.get('approval_threshold', 8)}"]
                                                          if (k.get("score") or 0) < cfg.get("approval_threshold", 8) and not k.get("owner_approval") else []) +                            ([f"automated QA {k['qa']}"] if k["qa"] != "PASS" else [])
         clips = [k for k in clips if not k.get("v2_of")]  # alternatives live inside their parent card
         disc = read(CAMPAIGNS / cid / "work" / "v4" / "discovery.json", {}) or {}
