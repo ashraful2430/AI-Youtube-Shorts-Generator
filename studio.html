@@ -169,7 +169,7 @@ function campaignsView(list){
   if(c.disclosure?.mode)sec.append(make('p','Disclosure: on-screen Ad label '+(c.disclosure.mode==='opening'?'first '+c.disclosure.seconds+' s (owner decision, campaign rules not verified)':'whole clip')+' · spoken within 10 s · #Ad first caption line · platform paid-promotion toggle','muted'));
   if(c.discovered?.length){const d=make('details');d.append(make('summary','Discovered moments ('+c.discovered.length+') — '+c.discovered.filter(m=>m.status==='PRODUCED').length+' produced, '+c.discovered.filter(m=>m.status.startsWith('REJECTED')).length+' rejected'));
    for(const m of c.discovered)d.append(make('p',m.status+' · '+m.window+' · '+m.moment+' · '+m.signal+' — '+m.note,m.status.startsWith('REJECTED')?'muted':'st'));sec.append(d);}
-  for(const stage of ['New candidate','Review','Approved (internal)','Published','Submitted','Campaign decision']){
+  for(const stage of ['Discovery','Review','Approved — Ready to Upload','Published','Submitted to Campaign','Accepted by Campaign','Rejected by Campaign']){
   const ks=c.clips.filter(k=>k.stage===stage);sec.append(make('h3',stage+' ('+ks.length+')'));if(!ks.length)continue;
   const grid=make('div',undefined,'reels');
   for(const k of ks.sort((a,b)=>b.score-a.score||a.n.localeCompare(b.n))){
@@ -178,7 +178,7 @@ function campaignsView(list){
    card.append(make('h3','#'+k.n+' · '+k.title+' · '+k.score+'/10'),make('p','Internal: '+k.stage+' · Registry: '+k.status,'st'),
     make('p','QA: '+k.qa,'muted'),make('p','Publishing: '+Object.entries(k.publish).map(([p,s])=>p+' '+s).join(' · ')+' · Submission: '+k.submission,'muted'),
     make('p','Source: '+(k.vod_url||k.vod)+' '+k.vod_timestamps,'path'),make('p','File: '+(k.path||'missing'),'path'));
-   const tags=[k.director==='V2'?'Director V2':null,k.rediscovered?'Rediscovered moment':null,k.v2_of?'V2 of #'+(k.original?.n||k.v2_of):null,k.locked?'LOCKED (published/submitted)':null,k.ready?'READY TO PUBLISH (internal)':null].filter(Boolean);
+   const tags=[k.director==='V2'?'Director V2':null,k.rediscovered?'Rediscovered moment':null,k.v2_of?'V2 of #'+(k.original?.n||k.v2_of):null,k.locked?'LOCKED (published/submitted)':null,k.ready?'READY TO UPLOAD':null].filter(Boolean);
    if(tags.length){const t=make('p',undefined,'tags');tags.forEach(x=>t.append(make('span',x)));card.append(t);}
    card.append(make('p','Streamer: '+k.streamer+' · Campaign: '+c.name+' · Version: v'+k.version+(k.director?' ('+k.director+')':'')+' · '+(k.duration_s?k.duration_s+' s · ':'')+'Publishing kit: '+(k.kit?'ready':'missing'),'muted'));
    if(k.missing?.length)card.append(make('p','Missing before approval: '+k.missing.join('; '),'warn'));

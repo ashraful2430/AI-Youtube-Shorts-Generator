@@ -80,7 +80,7 @@ with tempfile.TemporaryDirectory() as temp:
     assert studio.campaign_file("demo", "Review Clips/Demo/01.mp4")
     assert not studio.campaign_file("demo", "Review Clips/Other/01.mp4")
     assert studio.clip_stage({**k, "publish": {"TikTok": "PUBLISHED"}}, "demo") == "Published"
-    assert studio.clip_stage({**k, "submission": "REJECTED"}, "demo") == "Campaign decision"
+    assert studio.clip_stage({**k, "submission": "REJECTED"}, "demo") == "Rejected by Campaign"
 print("campaign stage checks passed")
 
 # run folders: campaign workspace copy wins over the preserved legacy original; names stay plain

@@ -44,17 +44,19 @@ def clip_stage(k, cid):
     """Pipeline column. Internal editorial stages (candidate/review/approved) come from the files that exist;
     platform and Content Rewards stages come from the registry, so they never mix."""
     sub = k.get("submission", "")
-    if sub.startswith(("ACCEPTED", "REJECTED")):
-        return "Campaign decision"
+    if sub.startswith("ACCEPTED"):
+        return "Accepted by Campaign"
+    if sub.startswith("REJECTED"):
+        return "Rejected by Campaign"
     if sub.startswith("SUBMITTED"):
-        return "Submitted"
+        return "Submitted to Campaign"
     if k.get("status") == "PUBLISHED" or any(str(v).startswith("PUBLISHED") for v in (k.get("publish") or {}).values()):
         return "Published"
     if k.get("approved_file") and campaign_file(cid, k["approved_file"]):
-        return "Approved (internal)"
+        return "Approved — Ready to Upload"
     if k.get("review_file") and campaign_file(cid, k["review_file"]):
         return "Review"
-    return "New candidate"
+    return "Discovery"
 
 
 DECISIONS = {"keep_original", "prefer_v2", "reject_v2"}
@@ -108,7 +110,7 @@ def campaigns():
             k["url"] = f"/campaign/{cid}/" + quote(here) if here else None
             k["path"] = str(ROOT / here) if here else None
             k["stage"] = clip_stage(k, cid)
-            k["ready"] = (k["stage"] == "Approved (internal)" and not k.get("blockers") and k.get("qa") == "PASS"
+            k["ready"] = (k["stage"] == "Approved — Ready to Upload" and not k.get("blockers") and k.get("qa") == "PASS"
                           and ((k.get("score") or 0) >= cfg.get("approval_threshold", 8) or k.get("owner_approval")) and not k.get("locked"))
         for k in clips:  # V2 <-> original pairing for side-by-side review
             if k.get("v2_of"):
