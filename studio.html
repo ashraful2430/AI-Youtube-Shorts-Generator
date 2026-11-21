@@ -166,6 +166,9 @@ function campaignsView(list){
   sec.append(make('h3','Required branding & captions'),tags);
   const v=make('details');v.append(make('summary','Requirements verified ('+c.verified.length+')'),...c.verified.map(x=>make('p','✓ '+x,'muted')));sec.append(v);
   const w=make('details');w.append(make('summary','Compliance warnings ('+c.warnings.length+') — manual checks'),...c.warnings.map(x=>make('p','⚠ '+x,'warn')));sec.append(w);
+  if(c.disclosure?.mode)sec.append(make('p','Disclosure: on-screen Ad label '+(c.disclosure.mode==='opening'?'first '+c.disclosure.seconds+' s (owner decision, campaign rules not verified)':'whole clip')+' · spoken within 10 s · #Ad first caption line · platform paid-promotion toggle','muted'));
+  if(c.discovered?.length){const d=make('details');d.append(make('summary','Discovered moments ('+c.discovered.length+') — '+c.discovered.filter(m=>m.status==='PRODUCED').length+' produced, '+c.discovered.filter(m=>m.status.startsWith('REJECTED')).length+' rejected'));
+   for(const m of c.discovered)d.append(make('p',m.status+' · '+m.window+' · '+m.moment+' · '+m.signal+' — '+m.note,m.status.startsWith('REJECTED')?'muted':'st'));sec.append(d);}
   for(const stage of ['New candidate','Review','Approved (internal)','Published','Submitted','Campaign decision']){
   const ks=c.clips.filter(k=>k.stage===stage);sec.append(make('h3',stage+' ('+ks.length+')'));if(!ks.length)continue;
   const grid=make('div',undefined,'reels');
@@ -177,7 +180,7 @@ function campaignsView(list){
     make('p','Source: '+(k.vod_url||k.vod)+' '+k.vod_timestamps,'path'),make('p','File: '+(k.path||'missing'),'path'));
    const tags=[k.director==='V2'?'Director V2':null,k.rediscovered?'Rediscovered moment':null,k.v2_of?'V2 of #'+(k.original?.n||k.v2_of):null,k.locked?'LOCKED (published/submitted)':null,k.ready?'READY TO PUBLISH (internal)':null].filter(Boolean);
    if(tags.length){const t=make('p',undefined,'tags');tags.forEach(x=>t.append(make('span',x)));card.append(t);}
-   card.append(make('p','Streamer: '+k.streamer+' · Campaign: '+c.name+' · Version: v'+k.version+' · Publishing kit: '+(k.kit?'ready':'missing'),'muted'));
+   card.append(make('p','Streamer: '+k.streamer+' · Campaign: '+c.name+' · Version: v'+k.version+(k.director?' ('+k.director+')':'')+' · '+(k.duration_s?k.duration_s+' s · ':'')+'Publishing kit: '+(k.kit?'ready':'missing'),'muted'));
    if(k.missing?.length)card.append(make('p','Missing before approval: '+k.missing.join('; '),'warn'));
    if(k.history?.length>1){const d=make('details');d.append(make('summary','Version history ('+k.history.length+')'));for(const h of k.history){d.append(make('p','v'+h.version+(h.active?' (active)':'')+' · '+h.score+'/10 · '+h.note,'muted'));if(h.urls[0]&&!h.active){const v=make('video');v.controls=true;v.preload='none';v.playsInline=true;v.src=h.urls[0];d.append(v);}}card.append(d);}
    if(k.alternatives?.length){const d=make('details');d.append(make('summary','Alternative cuts ('+k.alternatives.length+') - not active'));for(const a of k.alternatives){d.append(make('p',a.title+' · '+a.score+'/10'+(a.decision?' · owner: '+a.decision:''),'muted'));if(a.url){const v=make('video');v.controls=true;v.preload='none';v.playsInline=true;v.src=a.url;d.append(v);}const row=make('p');for(const [dv,lab] of [['keep_original','Keep active version'],['prefer_v2','Prefer this cut'],['reject_v2','Reject this cut']]){const b=make('button',lab);b.onclick=async()=>{const r=await fetch('/api/replacement-decision',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({campaign:c.id,clip:a.id,decision:dv})});b.textContent=r.ok?lab+' ✓':lab+' (failed)';};row.append(b);}d.append(row);}card.append(d);}

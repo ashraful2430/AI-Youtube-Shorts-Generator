@@ -17,7 +17,7 @@ ROOT = Path(os.environ.get("CLIP_ROOT", Path(__file__).resolve().parent.parent))
 RUNS = ROOT / "work" / "runs"
 UI = Path(__file__).resolve().parent / "studio.html"
 HOST, PORT = "127.0.0.1", 8765
-MEDIA = {"raw", "director", "polished", "thumbs", "temp", "hq", "input"}
+MEDIA = {"raw", "director", "polished", "thumbs", "temp", "hq", "input", "analysis"}
 MEDIA_EXT = {".mp4", ".webm", ".jpg", ".jpeg", ".png", ".wav", ".mp3"}
 REPORTS = {"director", "compliance", "analysis"}
 CAMPAIGNS = ROOT / "campaigns"  # campaign workspaces: campaigns/<id>/config/{campaign,clips}.json
@@ -97,6 +97,8 @@ def campaigns():
         cid = cfg.get("id")
         if cid != c.parent.parent.name:
             continue
+        skipped = {p.lower() for p in cfg.get("skipped_platforms", [])}
+        platforms = [p for p in cfg.get("platforms", []) if p.lower() not in skipped]
         clips = read(c.parent / "clips.json", []) or []
         for k in clips:
             qa = read(CAMPAIGNS / cid / "logs" / "qa" / f"{k.get('id')}.json", {}) or {}
@@ -107,7 +109,7 @@ def campaigns():
             k["path"] = str(ROOT / here) if here else None
             k["stage"] = clip_stage(k, cid)
             k["ready"] = (k["stage"] == "Approved (internal)" and not k.get("blockers") and k.get("qa") == "PASS"
-                          and (k.get("score") or 0) >= cfg.get("approval_threshold", 8))
+                          and ((k.get("score") or 0) >= cfg.get("approval_threshold", 8) or k.get("owner_approval")) and not k.get("locked"))
         for k in clips:  # V2 <-> original pairing for side-by-side review
             if k.get("v2_of"):
                 o = next((x for x in clips if x.get("id") == k["v2_of"]), {})
@@ -121,23 +123,26 @@ def campaigns():
                              "urls": [f"/campaign/{cid}/" + quote(b) for b in (h.get("backups") or []) + [h.get("export")] if b and campaign_file(cid, b)][:1]}
                             for h in hist]
             folder = ROOT / cfg.get("output_dir" if k.get("approved_file") else "review_dir", "-")
-            k["kit"] = all((folder / f).is_file() for f in ("UPLOAD-INFO.txt", "YOUTUBE-KIT.txt", "TIKTOK-KIT.txt", "INSTAGRAM-KIT.txt"))
-            k["missing"] = list(k.get("blockers") or []) + ([f"score {k.get('score')} < {cfg.get('approval_threshold', 8)}"]
-                                                         if (k.get("score") or 0) < cfg.get("approval_threshold", 8) else []) +                            ([f"automated QA {k['qa']}"] if k["qa"] != "PASS" else [])
+            kits = ["UPLOAD-INFO.txt"] + [f"{name}-KIT.txt" for name in ("YOUTUBE", "TIKTOK", "INSTAGRAM") if any(name.lower() in p.lower() for p in platforms)]
+            k["kit"] = all((folder / f).is_file() for f in kits)
+            k["missing"] = (["HOLD: publish status unverified - owner to confirm URL"] if (k.get("locked") or {}).get("pending_verification") else []) + list(k.get("blockers") or []) + ([f"score {k.get('score')} < {cfg.get('approval_threshold', 8)}"]
+                                                         if (k.get("score") or 0) < cfg.get("approval_threshold", 8) and not k.get("owner_approval") else []) +                            ([f"automated QA {k['qa']}"] if k["qa"] != "PASS" else [])
         clips = [k for k in clips if not k.get("v2_of")]  # alternatives live inside their parent card
+        disc = read(CAMPAIGNS / cid / "work" / "v4" / "discovery.json", {}) or {}
         counts = {}
         for k in clips:
             counts[k.get("status", "DRAFT")] = counts.get(k.get("status", "DRAFT"), 0) + 1
         r, cap = cfg.get("render", {}), cfg.get("caption", {})
         out.append({"id": cid, "name": cfg.get("name"), "streamer": cfg.get("streamer"), "status": cfg.get("status"),
-                    "platforms": cfg.get("platforms", []), "output_dir": str(ROOT / cfg.get("output_dir", "")),
+                    "platforms": platforms, "output_dir": str(ROOT / cfg.get("output_dir", "")),
                     "review_dir": str(ROOT / cfg.get("review_dir", "")), "threshold": cfg.get("approval_threshold", 8),
                     "verified": cfg.get("rules_verified", []),
                     "branding": {"label": r.get("disclosure_label"), "spoken": r.get("narration_text"),
-                                 "overlay": Path(r["overlay"]["file"]).name if r.get("overlay") else None,
+                    "overlay": Path(r["overlay"]["file"]).name if (r.get("overlay") or {}).get("file") else None,
                                  "first_line": cap.get("first_line"), "hashtags": cap.get("required_hashtags", []),
                                  "phrases": cap.get("required_phrases", []), "no_urls": cap.get("forbid_urls", False)},
-                    "warnings": cfg.get("rules_manual", []), "clips": clips, "counts": counts,
+                    "warnings": cfg.get("rules_manual", []) + cfg.get("pending_posting_process", []), "clips": clips, "counts": counts,
+                    "discovered": disc.get("moments", []), "disclosure": cfg.get("disclosure", {}),
                     "runs": [Path(r).name for r in cfg.get("legacy_runs", [])]})
     return out
 
@@ -291,7 +296,7 @@ def snapshot(selected):
     unavailable = {j["output"] for j in recent if j.get("output") and j["state"] in {"failed", "interrupted", "running"}}
     versions = [version_data(run, x) for x in assets(run, ["polished"], {".mp4", ".webm"}) if x["path"] not in unavailable]
     previews = assets(run, ["director"], {".mp4", ".webm"})
-    frames = assets(run, ["director", "thumbs", "temp"], {".jpg", ".png"})
+    frames = assets(run, ["director", "thumbs", "temp", "analysis"], {".jpg", ".png"})
     original = assets(run, ["hq", "input", "raw"], {".mp4", ".webm"})
     current = next((j for j in recent if j.get("run") == run.name), None)
     counts = {"chunks": len(list((run / "analysis").glob("chunk_*.json"))),
